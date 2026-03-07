@@ -26,9 +26,13 @@ export default function Dashboard() {
         {/* Header */}
         <header className="mb-10">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-2 h-8 bg-amber-400 rounded-full" />
+            <img 
+              src="/yepzy-logo.png" 
+              alt="Yepzy Logo" 
+              className="w-10 h-10 md:w-12 md:h-12 object-contain"
+            />
             <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
-              ACH Year-Over-Year
+              Yepzy ACH Year-Over-Year
             </h1>
           </div>
           <p className="text-slate-400 text-lg ml-5">

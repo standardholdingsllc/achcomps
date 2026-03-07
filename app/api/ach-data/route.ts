@@ -216,16 +216,16 @@ const KNOWN_EMPLOYER_PATTERNS = [
 ];
 
 /**
- * Minimum amount for payroll (in cents) - $25
+ * Minimum amount for payroll (in cents) - $10
  * Filters out micro-deposits and very small payments
  */
-const MIN_PAYROLL_AMOUNT_CENTS = 2500;
+const MIN_PAYROLL_AMOUNT_CENTS = 1000;
 
 /**
- * Maximum reasonable payroll amount (in cents) - $15,000
+ * Maximum reasonable payroll amount (in cents) - $50,000
  * Most individual payroll deposits won't exceed this
  */
-const MAX_PAYROLL_AMOUNT_CENTS = 1500000;
+const MAX_PAYROLL_AMOUNT_CENTS = 5000000;
 
 /**
  * Determines if a received ACH payment is likely a payroll payment
@@ -285,14 +285,20 @@ function isLikelyPayrollPayment(payment: ReceivedPayment): boolean {
     return true;
   }
   
-  // 9. Default: If amount is in typical payroll range ($100-$5000) and no red flags
+  // 9. Default: If amount is in typical payroll range ($50-$10000) and no red flags
   // This catches employers we haven't explicitly listed
-  if (amount >= 10000 && amount <= 500000) {
+  if (amount >= 5000 && amount <= 1000000) {
     // Additional check: company name should look like a business
     // Exclude single-word generic names
-    if (upperCompany.length > 5 && !upperCompany.includes('BANK')) {
+    if (upperCompany.length > 3 && !upperCompany.includes('BANK')) {
       return true;
     }
+  }
+  
+  // 10. If we got here with a reasonable amount and company name, include it
+  // This is a fallback to be more inclusive
+  if (amount >= 5000 && upperCompany.length > 0) {
+    return true;
   }
   
   return false;

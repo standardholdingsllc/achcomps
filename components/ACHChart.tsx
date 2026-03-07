@@ -80,6 +80,15 @@ export function ACHChart({ employerName }: Props) {
     );
   }
 
+  // Check if there's any actual data to display
+  const hasData = data.some(d => d.year2025 > 0 || (d.year2026 !== null && d.year2026 > 0));
+  
+  // Calculate max value for Y-axis domain
+  const maxValue = Math.max(
+    ...data.map(d => Math.max(d.year2025, d.year2026 || 0))
+  );
+  const yAxisMax = maxValue > 0 ? Math.ceil(maxValue * 1.1) : 10;
+
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
@@ -88,7 +97,7 @@ export function ACHChart({ employerName }: Props) {
           {payload.map((entry: any, index: number) => (
             entry.value !== null && (
               <p key={index} className="text-sm" style={{ color: entry.color }}>
-                {entry.name}: <span className="font-bold">{entry.value.toLocaleString()} ACHs</span>
+                {entry.name}: <span className="font-bold font-mono">{entry.value.toLocaleString()} ACHs</span>
               </p>
             )
           ))}
@@ -121,6 +130,26 @@ export function ACHChart({ employerName }: Props) {
           </div>
         </div>
       </div>
+
+      {!hasData && (
+        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 mb-6">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
+              <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-amber-400 font-semibold">No payroll payments found</h3>
+              <p className="text-slate-400 text-sm mt-1">
+                No incoming ACH payments matching payroll criteria were found for this employer. 
+                This could mean the employer&apos;s workers haven&apos;t received payroll deposits yet, 
+                or the payments are being filtered out by our payroll detection logic.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       
       <ResponsiveContainer width="100%" height={420}>
         <LineChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
@@ -156,6 +185,7 @@ export function ACHChart({ employerName }: Props) {
             tickLine={{ stroke: '#334155' }}
             axisLine={{ stroke: '#334155' }}
             tickFormatter={(value) => value.toLocaleString()}
+            domain={[0, yAxisMax]}
           />
           
           <Tooltip content={<CustomTooltip />} />

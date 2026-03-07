@@ -88,7 +88,7 @@ export function SummaryCards({ employerName }: Props) {
         <h3 className="text-slate-500 text-xs font-medium uppercase tracking-wider">
           {summary.previousYear} Total ACHs
         </h3>
-        <p className="text-3xl font-bold text-indigo-400 mt-2">
+        <p className="text-3xl font-bold text-indigo-400 mt-2 font-mono">
           {summary.totalPrevYear.toLocaleString()}
         </p>
         <p className="text-xs text-slate-500 mt-1">
@@ -101,11 +101,11 @@ export function SummaryCards({ employerName }: Props) {
         <h3 className="text-slate-500 text-xs font-medium uppercase tracking-wider">
           {summary.currentYear} YTD ACHs
         </h3>
-        <p className="text-3xl font-bold text-amber-400 mt-2">
+        <p className="text-3xl font-bold text-amber-400 mt-2 font-mono">
           {summary.totalCurrYear.toLocaleString()}
         </p>
         <div className="flex items-center gap-2 mt-1">
-          <span className={`text-sm font-medium ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
+          <span className={`text-sm font-medium font-mono ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
             {isPositive ? '↑' : '↓'} {Math.abs(ytdChange).toFixed(1)}%
           </span>
           <span className="text-xs text-slate-500">vs same period {summary.previousYear}</span>

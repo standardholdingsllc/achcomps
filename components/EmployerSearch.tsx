@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 interface Employer {
   customerId: string;
@@ -18,8 +18,21 @@ export function EmployerSearch({ onSelect }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (query.length < 2) {
@@ -71,14 +84,19 @@ export function EmployerSearch({ onSelect }: Props) {
     }
   };
 
-  const handleSelect = (employer: Employer) => {
-    onSelect(employer);
-    setQuery(employer.name);
+  const handleSelect = useCallback((employer: Employer) => {
     setIsOpen(false);
-  };
+    setResults([]);
+    setQuery(employer.name);
+    setSelectedIndex(-1);
+    // Small delay to ensure dropdown closes before triggering data fetch
+    setTimeout(() => {
+      onSelect(employer);
+    }, 10);
+  }, [onSelect]);
 
   return (
-    <div className="relative max-w-xl">
+    <div ref={containerRef} className="relative max-w-xl">
       <label className="block text-sm font-medium text-slate-300 mb-3 ml-1">
         Search Employer
       </label>
