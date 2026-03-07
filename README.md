@@ -1,6 +1,15 @@
 # ACH Year-Over-Year Comparison Dashboard
 
-A Vercel-hosted dashboard for tracking incoming ACH payments per employer, comparing current year performance against the previous year.
+A Vercel-hosted dashboard for tracking incoming ACH payments per employer, comparing current year (2026) performance against the previous year (2025).
+
+Built for Standard Holdings to monitor seasonal labor payment patterns across agricultural and landscaping clients.
+
+## Features
+
+- 🔍 **Employer Search** - Search by employer name (Everglades, Patterson Farms, etc.)
+- 📊 **Year-over-Year Chart** - Interactive line chart comparing weekly ACH counts
+- 📈 **Summary Statistics** - Total ACHs, YoY percentage change, trend status
+- 👥 **Worker Aggregation** - Automatically aggregates all workers per employer
 
 ## Quick Start
 
@@ -9,11 +18,9 @@ A Vercel-hosted dashboard for tracking incoming ACH payments per employer, compa
 npm install
 
 # Set up environment variables
-cp .env.example .env.local
-# Edit .env.local with your Unit API credentials
-
-# Replace placeholder customer data
-# Copy your real customer_company.json to data/customer_company.json
+# Create .env.local with:
+# UNIT_API_TOKEN=your_unit_api_token_here
+# UNIT_API_URL=https://api.s.unit.sh
 
 # Run development server
 npm run dev
@@ -21,46 +28,25 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) to view the dashboard.
 
-## Configuration
-
-### Environment Variables
-
-Create `.env.local` with:
-
-```env
-UNIT_API_TOKEN=your_unit_api_token_here
-UNIT_API_URL=https://api.s.unit.sh
-```
+## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `UNIT_API_TOKEN` | Your Unit API bearer token (get from Unit Dashboard) |
+| `UNIT_API_TOKEN` | Your Unit API bearer token ([get from Unit Dashboard](https://app.s.unit.sh)) |
 | `UNIT_API_URL` | `https://api.s.unit.sh` (sandbox) or `https://api.unit.co` (production) |
 
-### Customer Mapping
+## Data Sources
 
-Replace `data/customer_company.json` with your actual customer-to-employer mapping file.
+- **ACH Payments**: [Unit Banking API](https://www.unit.co/docs/api/payments/ach/receiving/apis) - `GET /received-payments`
+- **Customer Mapping**: [customer_company.json](https://github.com/standardholdingsllc/hubspot-address-mapper/blob/main/web-app/data/customer_company.json) - Maps Unit customer IDs to employer names
 
-Expected structure:
-```json
-{
-  "mappings": [
-    {
-      "customerId": "123456",
-      "accountId": "789012",
-      "employerName": "Example Farms LLC"
-    }
-  ]
-}
-```
+## Deployment to Vercel
 
-## Deployment
-
-### Deploy to Vercel
-
-1. Push to GitHub
+1. Push to GitHub ✅
 2. Import repository at [vercel.com/new](https://vercel.com/new)
-3. Add environment variables in Vercel project settings
+3. Add environment variables in Vercel project settings:
+   - `UNIT_API_TOKEN`
+   - `UNIT_API_URL`
 4. Deploy
 
 ## Tech Stack
@@ -76,10 +62,8 @@ Expected structure:
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/employers?q=query` | Search employers by name |
-| `GET /api/ach-data?customerId=123` | Get YoY ACH comparison data |
+| `GET /api/ach-data?employer=Name` | Get YoY ACH comparison data for an employer |
 
-## Resources
+## Documentation
 
-- [Unit API Documentation](https://www.unit.co/docs/api/)
-- [Received Payments API](https://www.unit.co/docs/api/payments/ach/receiving/apis)
-- [Build Guide](./BUILD_GUIDE.md)
+See [BUILD_GUIDE.md](./BUILD_GUIDE.md) for detailed implementation documentation.
