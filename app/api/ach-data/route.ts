@@ -46,124 +46,255 @@ interface WeeklyData {
 }
 
 // ============================================================================
-// PAYROLL FILTERING LOGIC
+// PAYROLL FILTERING LOGIC - Based on real data analysis
 // ============================================================================
 
 /**
- * Known non-payroll company names to exclude
- * Add more as you identify them in your data
+ * Company names that are DEFINITELY NOT employer payroll
+ * These are exact matches or patterns found in real data
  */
-const EXCLUDED_COMPANY_NAMES = [
+const EXCLUDED_COMPANY_PATTERNS = [
+  // Tax refunds - IRS and state
+  'IRS TREAS',
+  'IRS',
+  'TAX REFUND',
+  'STATE OF ',      // STATE OF ARK, STATE OF ALABAMA, STATE OF LA DEP
+  'SC STATE TREAS', // SC STATE TREASUR
+  'MS TAX COMMISS',
+  'IASTTAXRFD',
+  'TURBOTAX',
+  
+  // Remittance / Money transfer services (pattern: #XXX RIA)
+  '#DHF RIA',
+  '#FZF RIA', 
+  '#DPJ RIA',
+  '#PWG RIA',
+  '#KTV RIA',
+  '#JFK RIA',
+  'RIA',           // Catch-all for remittance
+  'XOOM',
+  'VIAMERICAS',
+  
+  // P2P / Consumer payments
+  'PAYPAL',
+  'ZELLE',
+  'VENMO',
+  'CASH APP',
+  
+  // Banks / Financial services (not payroll)
+  'CAPITAL ONE',
+  'BANK OF AMERICA',
+  'SYNOVUS BANK',
+  'FICIBK',        // FICIBK CK WEBXFR
+  
+  // Insurance / Bills
+  'VERIZON',
+  'ATT',
+  'AMEX EPAYMENT',
+  'PROGRESSIVELEASE',
+  'FALCON INSUR',
+  'CREATIVE RISK',
+  
+  // Tax prep services
+  'SBTPG',         // Santa Barbara Tax Products Group (tax refund processor)
+  'DANDELION',
+];
+
+/**
+ * Description patterns that indicate NON-payroll
+ */
+const EXCLUDED_DESCRIPTION_PATTERNS = [
   // Tax refunds
-  'IRS', 'TREAS', 'TREASURY', 'TAX REFUND', 'STATE TAX', 'FRANCHISE TAX',
-  // Bank verification / micro-deposits
-  'PLAID', 'STRIPE', 'VERIFY', 'VERIFICATION', 'MICRO', 'TEST',
-  // Government benefits (not employer payroll)
-  'SSA', 'SOCIAL SECURITY', 'SSI', 'DISABILITY',
-  // Other non-payroll
-  'VENMO', 'PAYPAL', 'CASH APP', 'ZELLE',
+  'TAX REF',
+  'TAX REFUND',
+  'TAXRFD',        // Catches ARSTTAXRFD, GASTTAXRFD, LASTTAXRFD, IASTTAXRFD, MSSTTAXRFD
+  'RFND DISB',
+  'IRS REFUND',
+  'USATAXPYMT',
+  
+  // Account verification (micro-deposits)
+  'ACCTVERIFY',
+  'VERIFY',
+  
+  // P2P / Transfers
+  'P2P',
+  'ZELLE',
+  'TRANSFER',
+  'MOBILE PMT',
+  
+  // Generic bill payments (not employer payroll)
+  'BILL_PAY',
+  'INSURANCE',
+  'FLBLUE',        // Florida Blue insurance
 ];
 
 /**
- * Keywords that indicate payroll payments (positive signals)
+ * Description patterns that CONFIRM payroll
+ * If description matches these, it's definitely payroll
  */
-const PAYROLL_KEYWORDS = [
-  'PAYROLL', 'PAYROL', 'PAY ROLL',
-  'DIRECT DEP', 'DIR DEP', 'DIRECT DEPOSIT',
-  'SALARY', 'WAGES', 'WAGE',
-  'PAYCHEX', 'ADP', 'GUSTO', 'QUICKBOOKS', 'INTUIT',
-  'EMPLOYEE', 'EMP PAY',
+const PAYROLL_DESCRIPTION_PATTERNS = [
+  'PAYROLL',
+  'PAYROL',        // Catches ALVPAYROLL, 0PGPAYROLL, ALQPAYROLL, ALUPAYROLL, MCNEILLL PAYROLL
+  'PAY',           // Generic but common for payroll
+  'QUICKBOOKS',    // Payroll via QuickBooks
+  'DIR DEP',       // Direct Deposit
+  'DIRECT DEP',
 ];
 
 /**
- * Keywords that indicate NON-payroll payments (negative signals)
+ * Company name patterns that CONFIRM payroll (known employers)
+ * These are real employer names from the data
  */
-const NON_PAYROLL_KEYWORDS = [
-  'TAX REFUND', 'REFUND', 'TAX REF',
-  'VERIFICATION', 'VERIFY', 'MICRO DEPOSIT',
-  'TRANSFER', 'XFER',
-  'BENEFIT', 'SSA', 'SSI',
-  'REBATE', 'REWARD', 'BONUS OFFER',
-  'INTEREST', 'DIVIDEND',
+const KNOWN_EMPLOYER_PATTERNS = [
+  // Large employers from the data
+  'SOUTHERNORCHMGMT',
+  'JACKSON CITRUS',
+  'PEARSON FARM',
+  'FARM LABOR',
+  'WILLIAMS',
+  'MCNEILL',
+  'LEDESMA',
+  'CIRCLEH',
+  'NORTH AMERICAN',
+  'PATTERSON',
+  'WOLF CREEK',
+  'LEWIS NURSERY',
+  'WISHON',
+  'SUGAR MOUNT',
+  'PAYROLL DEPOSIT',  // Generic payroll company name
+  'EVERG',            // Evergreen companies
+  'FRESHPIK',
+  'JACKSONS FARMING',
+  'SUPERIOR MIDWAY',
+  'BOTTOMLEY',
+  'SALES & SE',
+  'APPALAC',
+  'NORTH 40',
+  'TULL HILL',
+  'MERRI',
+  'PIEDMONT',
+  'REITHOFFER',
+  'GOLD STAR',
+  'SHARP FARMS',
+  'H2A',              // H2A visa labor contractors
+  'ADVANCED AGRICUL',
+  'CRITCHER',
+  'BOSEMAN FARMS',
+  'CLINE CHURCH',
+  'RIVER\'S EDGE',
+  'AMUSEMENT',        // Carnival/amusement companies
+  'PIERCE LEAF',
+  'MCMAKIN',
+  'BARBEE',
+  'SOUTH CAROLINA G',
+  'BARNES FARM',
+  'BATTLEBORO',
+  'RESONATE FOODS',
+  'RAM NUTIENT',
+  'BARR EVERGREEN',
+  'BENEDICTS',
+  'GROSS FARMS',
+  'TRI-AIR',
+  'HIGHLAND',
+  'PUGHS',
+  'TRIPLE H',
+  'TNT',
+  'BAILEY FARMS',
+  'RIVER BEND',
+  'DEGGELLER',
+  'STEVE MITCHELL',
+  'GUSTO',            // Gusto Payroll
+  'SUMMIT FARMS',
+  'ADAMS COUNTY',
+  'BONNIE PLANTS',
+  'MID-AMERICA',
+  'SANDERSON',
+  'WHITAKERS',
+  'GREAT AMUSEMENT',
+  'FUTURE PLASTER',
+  'REPUBLIC TRS',     // Republic Services (could be payroll)
 ];
 
 /**
- * Minimum amount threshold (in cents) - filters out micro-deposits
- * $5.00 = 500 cents
+ * Minimum amount for payroll (in cents) - $25
+ * Filters out micro-deposits and very small payments
  */
-const MIN_PAYROLL_AMOUNT_CENTS = 500;
+const MIN_PAYROLL_AMOUNT_CENTS = 2500;
 
 /**
- * Maximum reasonable payroll amount (in cents) - filters out unusual large transfers
- * $50,000 = 5,000,000 cents
+ * Maximum reasonable payroll amount (in cents) - $15,000
+ * Most individual payroll deposits won't exceed this
  */
-const MAX_PAYROLL_AMOUNT_CENTS = 5000000;
+const MAX_PAYROLL_AMOUNT_CENTS = 1500000;
 
 /**
  * Determines if a received ACH payment is likely a payroll payment
  */
 function isLikelyPayrollPayment(payment: ReceivedPayment): boolean {
-  const { amount, companyName, description, secCode } = payment.attributes;
+  const { amount, companyName, description } = payment.attributes;
   
-  // 1. Amount filters - exclude micro-deposits and unusually large transfers
+  const upperCompany = (companyName || '').toUpperCase().trim();
+  const upperDescription = (description || '').toUpperCase().trim();
+  
+  // 1. Amount filter - must be reasonable payroll amount
   if (amount < MIN_PAYROLL_AMOUNT_CENTS || amount > MAX_PAYROLL_AMOUNT_CENTS) {
     return false;
   }
   
-  // 2. SEC Code filter - PPD (Prearranged Payment and Deposit) is typical for payroll
-  // CCD is for business-to-business, which could also be payroll
-  // Exclude WEB (web-initiated) which is often person-to-person
-  if (secCode) {
-    const code = secCode.toUpperCase();
-    // WEB transactions are usually not payroll
-    if (code === 'WEB') {
-      return false;
-    }
-    // PPD is the standard payroll SEC code - strong positive signal
-    if (code === 'PPD') {
-      // Continue with other checks but this is a good sign
-    }
-  }
-  
-  // 3. Check company name against exclusion list
-  if (companyName) {
-    const upperCompany = companyName.toUpperCase();
-    for (const excluded of EXCLUDED_COMPANY_NAMES) {
-      if (upperCompany.includes(excluded)) {
-        return false;
-      }
-    }
-  }
-  
-  // 4. Check description for non-payroll keywords
-  const upperDescription = (description || '').toUpperCase();
-  const upperCompanyName = (companyName || '').toUpperCase();
-  const combinedText = `${upperDescription} ${upperCompanyName}`;
-  
-  for (const keyword of NON_PAYROLL_KEYWORDS) {
-    if (combinedText.includes(keyword)) {
+  // 2. Check description for EXCLUDED patterns (tax refunds, verification, P2P)
+  for (const pattern of EXCLUDED_DESCRIPTION_PATTERNS) {
+    if (upperDescription.includes(pattern)) {
       return false;
     }
   }
   
-  // 5. Positive signal: Check for payroll keywords
-  // If we find payroll keywords, definitely include it
-  for (const keyword of PAYROLL_KEYWORDS) {
-    if (combinedText.includes(keyword)) {
+  // 3. Check company name for EXCLUDED patterns
+  for (const pattern of EXCLUDED_COMPANY_PATTERNS) {
+    if (upperCompany.includes(pattern.toUpperCase())) {
+      return false;
+    }
+  }
+  
+  // 4. Check for RIA pattern (remittance services like #JFK RIA)
+  if (upperCompany.match(/^#[A-Z]{2,4}\s+RIA$/)) {
+    return false;
+  }
+  
+  // 5. Check description for PAYROLL patterns - strong positive signal
+  for (const pattern of PAYROLL_DESCRIPTION_PATTERNS) {
+    if (upperDescription.includes(pattern)) {
       return true;
     }
   }
   
-  // 6. Default: If amount is reasonable and no red flags, include it
-  // Most employer payroll ACHs won't explicitly say "PAYROLL" but will be
-  // regular recurring payments from the same company
-  // A reasonable payroll amount range: $50 - $10,000 per payment
-  if (amount >= 5000 && amount <= 1000000) {
+  // 6. Check company name for known employers - strong positive signal
+  for (const pattern of KNOWN_EMPLOYER_PATTERNS) {
+    if (upperCompany.includes(pattern.toUpperCase())) {
+      return true;
+    }
+  }
+  
+  // 7. AchBatch description with reasonable amount is likely payroll
+  // (SouthernOrchMgmt uses "AchBatch" as description)
+  if (upperDescription === 'ACHBATCH' && amount >= 10000) {
     return true;
   }
   
-  // 7. Small amounts ($5-$50) without payroll keywords are suspicious
-  // Could be verification deposits
+  // 8. CONS PAY (consolidated pay) is likely payroll
+  if (upperDescription === 'CONS PAY') {
+    return true;
+  }
+  
+  // 9. Default: If amount is in typical payroll range ($100-$5000) and no red flags
+  // This catches employers we haven't explicitly listed
+  if (amount >= 10000 && amount <= 500000) {
+    // Additional check: company name should look like a business
+    // Exclude single-word generic names
+    if (upperCompany.length > 5 && !upperCompany.includes('BANK')) {
+      return true;
+    }
+  }
+  
   return false;
 }
 
@@ -280,7 +411,11 @@ async function fetchPayrollPaymentsForEmployer(
   // Filter to only payroll payments
   const payrollPayments = allPayments.filter(isLikelyPayrollPayment);
   
-  console.log(`[${employerName}] Total ACHs: ${allPayments.length}, Payroll ACHs: ${payrollPayments.length}`);
+  // Log filtering stats for debugging
+  const excluded = allPayments.length - payrollPayments.length;
+  if (excluded > 0) {
+    console.log(`[${employerName}] Total: ${allPayments.length}, Payroll: ${payrollPayments.length}, Excluded: ${excluded}`);
+  }
   
   return payrollPayments;
 }
