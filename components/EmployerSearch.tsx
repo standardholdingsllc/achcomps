@@ -21,6 +21,7 @@ export function EmployerSearch({ onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const justSelectedRef = useRef(false);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -35,6 +36,12 @@ export function EmployerSearch({ onSelect }: Props) {
   }, []);
 
   useEffect(() => {
+    // Skip search if we just selected an item (prevents dropdown from reopening)
+    if (justSelectedRef.current) {
+      justSelectedRef.current = false;
+      return;
+    }
+
     if (query.length < 2) {
       setResults([]);
       setIsOpen(false);
@@ -85,14 +92,12 @@ export function EmployerSearch({ onSelect }: Props) {
   };
 
   const handleSelect = useCallback((employer: Employer) => {
+    justSelectedRef.current = true;
     setIsOpen(false);
     setResults([]);
     setQuery(employer.name);
     setSelectedIndex(-1);
-    // Small delay to ensure dropdown closes before triggering data fetch
-    setTimeout(() => {
-      onSelect(employer);
-    }, 10);
+    onSelect(employer);
   }, [onSelect]);
 
   return (

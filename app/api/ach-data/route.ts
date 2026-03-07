@@ -484,17 +484,22 @@ export async function GET(request: Request) {
     const previousYear = currentYear - 1;
     const currentWeek = getWeekNumber(new Date());
     
+    // Unit API requires full ISO 8601 timestamps
+    const prevYearStart = `${previousYear}-01-01T00:00:00.000Z`;
+    const prevYearEnd = `${previousYear}-12-31T23:59:59.999Z`;
+    const currYearStart = `${currentYear}-01-01T00:00:00.000Z`;
+    const today = new Date().toISOString();
+    
     // Fetch and filter payroll payments only
     const prevYearPayments = await fetchPayrollPaymentsForEmployer(
       employerName,
-      `${previousYear}-01-01`,
-      `${previousYear}-12-31`
+      prevYearStart,
+      prevYearEnd
     );
     
-    const today = new Date().toISOString().split('T')[0];
     const currYearPayments = await fetchPayrollPaymentsForEmployer(
       employerName,
-      `${currentYear}-01-01`,
+      currYearStart,
       today
     );
 
