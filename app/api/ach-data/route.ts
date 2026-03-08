@@ -301,16 +301,19 @@ export async function GET(request: Request) {
 
     const chartData: WeeklyData[] = [];
 
+    // Only show completed weeks for current year (current week is incomplete/in-flight)
+    const lastCompleteWeek = currentWeek - 1;
+
     for (let week = 1; week <= 52; week++) {
       chartData.push({
         week: `Week ${week}`,
         weekNum: week,
         year2025: prevYearByWeek.get(week) || 0,
-        year2026: week <= currentWeek ? (currYearByWeek.get(week) || 0) : null,
+        year2026: week <= lastCompleteWeek ? (currYearByWeek.get(week) || 0) : null,
       });
     }
 
-    const prevYearSamePeriod = countPaymentsUpToWeek(prevYearByWeek, currentWeek);
+    const prevYearSamePeriod = countPaymentsUpToWeek(prevYearByWeek, lastCompleteWeek);
     const workerCount = getCustomerIdsForEmployer(employerName).length;
 
     return NextResponse.json({
