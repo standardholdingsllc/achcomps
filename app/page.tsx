@@ -69,7 +69,7 @@ export default function Dashboard() {
 
         {/* Footer */}
         <footer className="mt-20 pt-6 border-t border-slate-800 text-center text-sm text-slate-500">
-          Standard Holdings • ACH Tracking Dashboard • Powered by Unit API
+          ACH Tracking Dashboard • Powered by Unit API
         </footer>
       </div>
     </main>
