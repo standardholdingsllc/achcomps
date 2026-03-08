@@ -54,6 +54,22 @@ export function ACHChart({ employerName }: Props) {
     (new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000)
   );
 
+  // Month markers - approximate week number where each month starts
+  const monthMarkers = [
+    { week: 1, label: 'Jan' },
+    { week: 5, label: 'Feb' },
+    { week: 9, label: 'Mar' },
+    { week: 14, label: 'Apr' },
+    { week: 18, label: 'May' },
+    { week: 22, label: 'Jun' },
+    { week: 27, label: 'Jul' },
+    { week: 31, label: 'Aug' },
+    { week: 35, label: 'Sep' },
+    { week: 40, label: 'Oct' },
+    { week: 44, label: 'Nov' },
+    { week: 48, label: 'Dec' },
+  ];
+
   if (loading) {
     return (
       <div className="bg-[var(--card)] border border-[var(--card-border)] rounded-2xl p-8 flex items-center justify-center h-[500px]">
@@ -173,9 +189,8 @@ export function ACHChart({ employerName }: Props) {
           <XAxis 
             dataKey="week" 
             stroke="#475569"
-            tick={{ fill: '#64748B', fontSize: 11 }}
-            tickLine={{ stroke: '#334155' }}
-            interval={3}
+            tick={false}
+            tickLine={false}
             axisLine={{ stroke: '#334155' }}
           />
           
@@ -190,12 +205,29 @@ export function ACHChart({ employerName }: Props) {
           
           <Tooltip content={<CustomTooltip />} />
           
+          {/* Month markers */}
+          {monthMarkers.map(({ week, label }) => (
+            <ReferenceLine
+              key={label}
+              x={`Week ${week}`}
+              stroke="#334155"
+              strokeDasharray="2 4"
+              label={{
+                value: label,
+                position: 'bottom',
+                fill: '#64748B',
+                fontSize: 10,
+                offset: 10,
+              }}
+            />
+          ))}
+          
           {/* Reference line for current week */}
           <ReferenceLine 
             x={`Week ${currentWeek}`} 
             stroke="#F59E0B" 
             strokeDasharray="5 5"
-            strokeOpacity={0.5}
+            strokeOpacity={0.7}
             label={{ 
               value: 'Today', 
               position: 'top', 
