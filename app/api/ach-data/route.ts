@@ -354,7 +354,7 @@ async function fetchReceivedPaymentsForCustomer(
       'filter[customerId]': customerId,
       'filter[since]': since,
       'filter[until]': until,
-      'filter[status][]': 'Completed',
+      'filter[includeCompleted]': 'true',
       'page[limit]': limit.toString(),
       'page[offset]': offset.toString(),
     });
