@@ -46,261 +46,57 @@ interface WeeklyData {
 }
 
 // ============================================================================
-// PAYROLL FILTERING LOGIC - Based on real data analysis
+// PAYMENT FILTERING LOGIC
+// ============================================================================
+// These are incoming ACH payments to seasonal workers. The vast majority are
+// employer payroll deposits. We only need to strip out obvious non-payroll
+// noise: IRS tax refunds, micro-deposits, remittance services, and P2P.
 // ============================================================================
 
 /**
- * Company names that are DEFINITELY NOT employer payroll
- * These are exact matches or patterns found in real data
+ * Minimum amount (in cents) — $5. Filters out micro-deposits / account verification.
  */
-const EXCLUDED_COMPANY_PATTERNS = [
-  // Tax refunds - IRS and state
-  'IRS TREAS',
-  'IRS',
-  'TAX REFUND',
-  'STATE OF ',      // STATE OF ARK, STATE OF ALABAMA, STATE OF LA DEP
-  'SC STATE TREAS', // SC STATE TREASUR
-  'MS TAX COMMISS',
-  'IASTTAXRFD',
-  'TURBOTAX',
-  
-  // Remittance / Money transfer services (pattern: #XXX RIA)
-  '#DHF RIA',
-  '#FZF RIA', 
-  '#DPJ RIA',
-  '#PWG RIA',
-  '#KTV RIA',
-  '#JFK RIA',
-  'RIA',           // Catch-all for remittance
-  'XOOM',
-  'VIAMERICAS',
-  
-  // P2P / Consumer payments
-  'PAYPAL',
-  'ZELLE',
-  'VENMO',
-  'CASH APP',
-  
-  // Banks / Financial services (not payroll)
-  'CAPITAL ONE',
-  'BANK OF AMERICA',
-  'SYNOVUS BANK',
-  'FICIBK',        // FICIBK CK WEBXFR
-  
-  // Insurance / Bills
-  'VERIZON',
-  'ATT',
-  'AMEX EPAYMENT',
-  'PROGRESSIVELEASE',
-  'FALCON INSUR',
-  'CREATIVE RISK',
-  
-  // Tax prep services
-  'SBTPG',         // Santa Barbara Tax Products Group (tax refund processor)
-  'DANDELION',
-];
+const MIN_AMOUNT_CENTS = 500;
 
 /**
- * Description patterns that indicate NON-payroll
+ * Returns true if the payment should be EXCLUDED (is clearly not payroll).
+ * Uses exact or very specific patterns to avoid false positives.
  */
-const EXCLUDED_DESCRIPTION_PATTERNS = [
-  // Tax refunds
-  'TAX REF',
-  'TAX REFUND',
-  'TAXRFD',        // Catches ARSTTAXRFD, GASTTAXRFD, LASTTAXRFD, IASTTAXRFD, MSSTTAXRFD
-  'RFND DISB',
-  'IRS REFUND',
-  'USATAXPYMT',
-  
-  // Account verification (micro-deposits)
-  'ACCTVERIFY',
-  'VERIFY',
-  
-  // P2P / Transfers
-  'P2P',
-  'ZELLE',
-  'TRANSFER',
-  'MOBILE PMT',
-  
-  // Generic bill payments (not employer payroll)
-  'BILL_PAY',
-  'INSURANCE',
-  'FLBLUE',        // Florida Blue insurance
-];
-
-/**
- * Description patterns that CONFIRM payroll
- * If description matches these, it's definitely payroll
- */
-const PAYROLL_DESCRIPTION_PATTERNS = [
-  'PAYROLL',
-  'PAYROL',        // Catches ALVPAYROLL, 0PGPAYROLL, ALQPAYROLL, ALUPAYROLL, MCNEILLL PAYROLL
-  'PAY',           // Generic but common for payroll
-  'QUICKBOOKS',    // Payroll via QuickBooks
-  'DIR DEP',       // Direct Deposit
-  'DIRECT DEP',
-];
-
-/**
- * Company name patterns that CONFIRM payroll (known employers)
- * These are real employer names from the data
- */
-const KNOWN_EMPLOYER_PATTERNS = [
-  // Large employers from the data
-  'SOUTHERNORCHMGMT',
-  'JACKSON CITRUS',
-  'PEARSON FARM',
-  'FARM LABOR',
-  'WILLIAMS',
-  'MCNEILL',
-  'LEDESMA',
-  'CIRCLEH',
-  'NORTH AMERICAN',
-  'PATTERSON',
-  'WOLF CREEK',
-  'LEWIS NURSERY',
-  'WISHON',
-  'SUGAR MOUNT',
-  'PAYROLL DEPOSIT',  // Generic payroll company name
-  'EVERG',            // Evergreen companies
-  'FRESHPIK',
-  'JACKSONS FARMING',
-  'SUPERIOR MIDWAY',
-  'BOTTOMLEY',
-  'SALES & SE',
-  'APPALAC',
-  'NORTH 40',
-  'TULL HILL',
-  'MERRI',
-  'PIEDMONT',
-  'REITHOFFER',
-  'GOLD STAR',
-  'SHARP FARMS',
-  'H2A',              // H2A visa labor contractors
-  'ADVANCED AGRICUL',
-  'CRITCHER',
-  'BOSEMAN FARMS',
-  'CLINE CHURCH',
-  'RIVER\'S EDGE',
-  'AMUSEMENT',        // Carnival/amusement companies
-  'PIERCE LEAF',
-  'MCMAKIN',
-  'BARBEE',
-  'SOUTH CAROLINA G',
-  'BARNES FARM',
-  'BATTLEBORO',
-  'RESONATE FOODS',
-  'RAM NUTIENT',
-  'BARR EVERGREEN',
-  'BENEDICTS',
-  'GROSS FARMS',
-  'TRI-AIR',
-  'HIGHLAND',
-  'PUGHS',
-  'TRIPLE H',
-  'TNT',
-  'BAILEY FARMS',
-  'RIVER BEND',
-  'DEGGELLER',
-  'STEVE MITCHELL',
-  'GUSTO',            // Gusto Payroll
-  'SUMMIT FARMS',
-  'ADAMS COUNTY',
-  'BONNIE PLANTS',
-  'MID-AMERICA',
-  'SANDERSON',
-  'WHITAKERS',
-  'GREAT AMUSEMENT',
-  'FUTURE PLASTER',
-  'REPUBLIC TRS',     // Republic Services (could be payroll)
-];
-
-/**
- * Minimum amount for payroll (in cents) - $10
- * Filters out micro-deposits and very small payments
- */
-const MIN_PAYROLL_AMOUNT_CENTS = 1000;
-
-/**
- * Maximum reasonable payroll amount (in cents) - $50,000
- * Most individual payroll deposits won't exceed this
- */
-const MAX_PAYROLL_AMOUNT_CENTS = 5000000;
-
-/**
- * Determines if a received ACH payment is likely a payroll payment
- */
-function isLikelyPayrollPayment(payment: ReceivedPayment): boolean {
+function shouldExcludePayment(payment: ReceivedPayment): boolean {
   const { amount, companyName, description } = payment.attributes;
-  
-  const upperCompany = (companyName || '').toUpperCase().trim();
-  const upperDescription = (description || '').toUpperCase().trim();
-  
-  // 1. Amount filter - must be reasonable payroll amount
-  if (amount < MIN_PAYROLL_AMOUNT_CENTS || amount > MAX_PAYROLL_AMOUNT_CENTS) {
-    return false;
-  }
-  
-  // 2. Check description for EXCLUDED patterns (tax refunds, verification, P2P)
-  for (const pattern of EXCLUDED_DESCRIPTION_PATTERNS) {
-    if (upperDescription.includes(pattern)) {
-      return false;
-    }
-  }
-  
-  // 3. Check company name for EXCLUDED patterns
-  for (const pattern of EXCLUDED_COMPANY_PATTERNS) {
-    if (upperCompany.includes(pattern.toUpperCase())) {
-      return false;
-    }
-  }
-  
-  // 4. Check for RIA pattern (remittance services like #JFK RIA)
-  if (upperCompany.match(/^#[A-Z]{2,4}\s+RIA$/)) {
-    return false;
-  }
-  
-  // 5. Check description for PAYROLL patterns - strong positive signal
-  for (const pattern of PAYROLL_DESCRIPTION_PATTERNS) {
-    if (upperDescription.includes(pattern)) {
-      return true;
-    }
-  }
-  
-  // 6. Check company name for known employers - strong positive signal
-  for (const pattern of KNOWN_EMPLOYER_PATTERNS) {
-    if (upperCompany.includes(pattern.toUpperCase())) {
-      return true;
-    }
-  }
-  
-  // 7. AchBatch description with reasonable amount is likely payroll
-  // (SouthernOrchMgmt uses "AchBatch" as description)
-  if (upperDescription === 'ACHBATCH' && amount >= 10000) {
-    return true;
-  }
-  
-  // 8. CONS PAY (consolidated pay) is likely payroll
-  if (upperDescription === 'CONS PAY') {
-    return true;
-  }
-  
-  // 9. Default: If amount is in typical payroll range ($50-$10000) and no red flags
-  // This catches employers we haven't explicitly listed
-  if (amount >= 5000 && amount <= 1000000) {
-    // Additional check: company name should look like a business
-    // Exclude single-word generic names
-    if (upperCompany.length > 3 && !upperCompany.includes('BANK')) {
-      return true;
-    }
-  }
-  
-  // 10. If we got here with a reasonable amount and company name, include it
-  // This is a fallback to be more inclusive
-  if (amount >= 5000 && upperCompany.length > 0) {
-    return true;
-  }
-  
+  const co = (companyName || '').toUpperCase().trim();
+  const desc = (description || '').toUpperCase().trim();
+
+  // 1. Skip tiny amounts (micro-deposits, account verification)
+  if (amount < MIN_AMOUNT_CENTS) return true;
+
+  // 2. IRS / state tax refunds — match company name exactly starting with these
+  if (co.startsWith('IRS TREAS') || co.startsWith('IRS ')) return true;
+  if (co.startsWith('TAX REFUND')) return true;
+  if (co.startsWith('STATE OF ')) return true;              // STATE OF ARK, etc.
+  if (co.startsWith('SC STATE TREAS')) return true;
+  if (co.startsWith('MS TAX COMMISS')) return true;
+  if (co === 'TURBOTAX' || co.startsWith('TURBOTAX ')) return true;
+  if (co === 'SBTPG' || co.startsWith('SBTPG ')) return true;
+
+  // 3. Tax-refund descriptions
+  if (desc.includes('TAX REF') || desc.includes('TAXRFD') || desc.includes('RFND DISB')) return true;
+  if (desc.includes('IRS REFUND') || desc.includes('USATAXPYMT')) return true;
+
+  // 4. Remittance services — exact pattern #XXX RIA
+  if (/^#[A-Z0-9]{2,4}\s+RIA/.test(co)) return true;
+  if (co === 'XOOM' || co.startsWith('XOOM ')) return true;
+  if (co === 'VIAMERICAS' || co.startsWith('VIAMERICAS ')) return true;
+
+  // 5. P2P / consumer platforms
+  if (co === 'PAYPAL' || co.startsWith('PAYPAL ')) return true;
+  if (co === 'VENMO' || co.startsWith('VENMO ')) return true;
+  if (co === 'CASH APP' || co.startsWith('CASH APP ')) return true;
+  if (desc === 'ZELLE' || desc.startsWith('ZELLE ') || co === 'ZELLE') return true;
+
+  // 6. Account verification micro-deposits
+  if (desc === 'ACCTVERIFY' || desc.startsWith('ACCTVERIFY')) return true;
+
   return false;
 }
 
@@ -413,16 +209,14 @@ async function fetchPayrollPaymentsForEmployer(
     }
   }
 
-  // Filter to only payroll payments
-  const payrollPayments = allPayments.filter(isLikelyPayrollPayment);
+  // Filter out obvious non-payroll noise (IRS, P2P, remittance, micro-deposits)
+  const filteredPayments = allPayments.filter(p => !shouldExcludePayment(p));
   
   // Log filtering stats for debugging
-  const excluded = allPayments.length - payrollPayments.length;
-  if (excluded > 0) {
-    console.log(`[${employerName}] Total: ${allPayments.length}, Payroll: ${payrollPayments.length}, Excluded: ${excluded}`);
-  }
+  const excluded = allPayments.length - filteredPayments.length;
+  console.log(`[${employerName}] Total: ${allPayments.length}, Kept: ${filteredPayments.length}, Excluded: ${excluded}`);
   
-  return payrollPayments;
+  return filteredPayments;
 }
 
 // ============================================================================
