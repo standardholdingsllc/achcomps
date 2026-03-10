@@ -158,6 +158,7 @@ async function fetchAllOrgPayments(
     const params = new URLSearchParams({
       'filter[since]': since,
       'filter[until]': until,
+      'filter[includeCompleted]': 'true',
       'page[limit]': limit.toString(),
       'page[offset]': offset.toString(),
     });
