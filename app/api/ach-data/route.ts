@@ -146,35 +146,56 @@ async function fetchReceivedPaymentsForCustomer(
   let hasMore = true;
 
   while (hasMore) {
+    // NOTE: Do NOT combine filter[includeCompleted] with filter[status]
+    // — the Unit API returns 400 if both are present.
+    // We omit includeCompleted entirely to avoid the conflict,
+    // then fall back to explicit status filters if needed.
     const params = new URLSearchParams({
       'filter[customerId]': customerId,
       'filter[since]': since,
       'filter[until]': until,
-      'filter[includeCompleted]': 'true',
       'page[limit]': limit.toString(),
       'page[offset]': offset.toString(),
     });
 
-    const response = await fetch(`${UNIT_API_URL}/received-payments?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${UNIT_API_TOKEN}`,
-        'Content-Type': 'application/vnd.api+json',
-      },
+    const headers = {
+      'Authorization': `Bearer ${UNIT_API_TOKEN}`,
+      'Content-Type': 'application/vnd.api+json',
+    };
+
+    let response = await fetch(`${UNIT_API_URL}/received-payments?${params}`, {
+      headers,
       next: { revalidate: 300 },
     });
 
+    // If the base query fails, the API may need explicit status filters
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Unit API Error for customer ${customerId}:`, response.status, errorText);
-      break;
+      const firstStatus = response.status;
+      // Retry once with includeCompleted (some Unit orgs require it)
+      params.set('filter[includeCompleted]', 'true');
+      response = await fetch(`${UNIT_API_URL}/received-payments?${params}`, {
+        headers,
+        next: { revalidate: 300 },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Unit API Error for customer ${customerId}: ${firstStatus} / ${response.status}`, errorText);
+        break;
+      }
     }
 
     const data: UnitApiResponse = await response.json();
     allPayments.push(...data.data);
 
-    const total = data.meta?.pagination?.total || data.data.length;
+    // Reliable pagination termination
+    const total = data.meta?.pagination?.total;
+    if (total !== undefined) {
+      hasMore = offset + limit < total;
+    } else {
+      hasMore = data.data.length === limit;
+    }
     offset += limit;
-    hasMore = offset < total && data.data.length === limit;
   }
 
   return allPayments;
