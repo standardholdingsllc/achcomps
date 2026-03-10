@@ -62,6 +62,7 @@ export function SummaryCards({ employerName }: Props) {
   const getTrendStatus = () => {
     if (ytdChange > 10) return { label: 'Strong Growth', color: 'text-emerald-400', bg: 'bg-emerald-500/10' };
     if (ytdChange > 0) return { label: 'Growing', color: 'text-emerald-400', bg: 'bg-emerald-500/10' };
+    if (ytdChange === 0) return { label: 'Stable', color: 'text-slate-400', bg: 'bg-slate-500/10' };
     if (ytdChange > -10) return { label: 'Slight Decline', color: 'text-amber-400', bg: 'bg-amber-500/10' };
     return { label: 'Significant Decline', color: 'text-rose-400', bg: 'bg-rose-500/10' };
   };
