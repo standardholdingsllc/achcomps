@@ -129,15 +129,11 @@ function getEmployerName(customerId: string): string | null {
 }
 
 /**
- * Fetches all received payments from Unit API for a single customer with pagination.
- * 
- * IMPORTANT: Do NOT use filter[includeCompleted] when filtering by customerId.
- * The Unit API returns 400 "Can not filter by status and use include completion option"
- * because filtering by customerId implicitly applies status filtering.
- * Without includeCompleted, the API returns all payments (pending + completed) by default.
+ * Fetches all received payments org-wide for a date range.
+ * Uses filter[includeCompleted]=true to get both pending and completed payments.
+ * This is the only reliable way to get historical completed payments from Unit API.
  */
-async function fetchReceivedPaymentsForCustomer(
-  customerId: string,
+async function fetchAllOrgPayments(
   since: string,
   until: string
 ): Promise<ReceivedPayment[]> {
@@ -151,9 +147,9 @@ async function fetchReceivedPaymentsForCustomer(
 
   while (true) {
     const params = new URLSearchParams({
-      'filter[customerId]': customerId,
       'filter[since]': since,
       'filter[until]': until,
+      'filter[includeCompleted]': 'true',
       'page[limit]': limit.toString(),
       'page[offset]': offset.toString(),
     });
@@ -163,30 +159,17 @@ async function fetchReceivedPaymentsForCustomer(
       'Content-Type': 'application/vnd.api+json',
     };
 
-    let response: Response;
-    try {
-      response = await fetch(`${UNIT_API_URL}/received-payments?${params}`, {
-        headers,
-        next: { revalidate: 300 },
-      });
-    } catch (err) {
-      console.error(`Network error for customer ${customerId}:`, err);
-      break;
-    }
+    const response = await fetch(`${UNIT_API_URL}/received-payments?${params}`, {
+      headers,
+      next: { revalidate: 300 },
+    });
 
     if (!response.ok) {
-      console.error(`Unit API error for customer ${customerId}: ${response.status}`);
-      break;
+      const errorText = await response.text();
+      throw new Error(`Unit API error ${response.status}: ${errorText}`);
     }
 
-    let data: UnitApiResponse;
-    try {
-      data = await response.json();
-    } catch {
-      console.error(`JSON parse error for customer ${customerId}`);
-      break;
-    }
-
+    const data: UnitApiResponse = await response.json();
     allPayments.push(...data.data);
 
     // Reliable pagination termination
@@ -197,14 +180,19 @@ async function fetchReceivedPaymentsForCustomer(
       if (data.data.length < limit) break;
     }
     offset += limit;
+
+    // Small delay to avoid hammering the API
+    await new Promise(r => setTimeout(r, 50));
   }
 
   return allPayments;
 }
 
 /**
- * Fetches all received payments for ALL customers belonging to an employer
- * and filters to only include likely payroll payments
+ * Fetches all received payments for an employer by:
+ * 1. Fetching ALL org payments for the date range (with includeCompleted=true)
+ * 2. Filtering to only payments belonging to this employer's customers
+ * 3. Filtering out non-payroll noise
  */
 async function fetchPayrollPaymentsForEmployer(
   employerName: string,
@@ -217,26 +205,23 @@ async function fetchPayrollPaymentsForEmployer(
     return [];
   }
 
-  const allPayments: ReceivedPayment[] = [];
-  const batchSize = 10;
+  // Create a Set for fast lookup
+  const customerIdSet = new Set(customerIds);
+
+  // Fetch all org payments for this date range
+  const allOrgPayments = await fetchAllOrgPayments(since, until);
   
-  for (let i = 0; i < customerIds.length; i += batchSize) {
-    const batch = customerIds.slice(i, i + batchSize);
-    const batchResults = await Promise.all(
-      batch.map(customerId => fetchReceivedPaymentsForCustomer(customerId, since, until))
-    );
-    
-    for (const payments of batchResults) {
-      allPayments.push(...payments);
-    }
-  }
+  // Filter to only this employer's customers
+  const employerPayments = allOrgPayments.filter(p => 
+    customerIdSet.has(p.relationships.customer.data.id)
+  );
 
   // Filter out obvious non-payroll noise (IRS, P2P, remittance, micro-deposits)
-  const filteredPayments = allPayments.filter(p => !shouldExcludePayment(p));
+  const filteredPayments = employerPayments.filter(p => !shouldExcludePayment(p));
   
   // Log filtering stats for debugging
-  const excluded = allPayments.length - filteredPayments.length;
-  console.log(`[${employerName}] Total: ${allPayments.length}, Kept: ${filteredPayments.length}, Excluded: ${excluded}`);
+  const excluded = employerPayments.length - filteredPayments.length;
+  console.log(`[${employerName}] Org total: ${allOrgPayments.length}, Employer: ${employerPayments.length}, Kept: ${filteredPayments.length}, Excluded: ${excluded}`);
   
   return filteredPayments;
 }
