@@ -211,6 +211,11 @@ async function fetchPayrollPaymentsForEmployer(
   // Fetch all org payments for this date range
   const allOrgPayments = await fetchAllOrgPayments(since, until);
   
+  // Debug: log sample customer IDs from payments vs what we're looking for
+  const samplePaymentCids = allOrgPayments.slice(0, 5).map(p => p.relationships.customer.data.id);
+  console.log(`[${employerName}] Looking for customer IDs: ${customerIds.slice(0, 5).join(', ')}...`);
+  console.log(`[${employerName}] Sample payment customer IDs: ${samplePaymentCids.join(', ')}`);
+  
   // Filter to only this employer's customers
   const employerPayments = allOrgPayments.filter(p => 
     customerIdSet.has(p.relationships.customer.data.id)
