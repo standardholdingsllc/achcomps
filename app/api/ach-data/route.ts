@@ -233,6 +233,16 @@ async function fetchPayrollPaymentsForEmployer(
   const excluded = employerPayments.length - filteredPayments.length;
   console.log(`[${employerName}] Org total: ${allOrgPayments.length}, Employer: ${employerPayments.length}, Kept: ${filteredPayments.length}, Excluded: ${excluded}`);
   
+  // Debug: log why payments are being excluded
+  if (excluded > 0 && employerPayments.length <= 20) {
+    employerPayments.forEach(p => {
+      const isExcluded = shouldExcludePayment(p);
+      if (isExcluded) {
+        console.log(`[${employerName}] EXCLUDED: amount=${p.attributes.amount}, company="${p.attributes.companyName}", desc="${p.attributes.description}"`);
+      }
+    });
+  }
+  
   return filteredPayments;
 }
 
