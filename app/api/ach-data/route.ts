@@ -129,7 +129,12 @@ function getEmployerName(customerId: string): string | null {
 }
 
 /**
- * Fetches all received payments from Unit API for a single customer with pagination
+ * Fetches all received payments from Unit API for a single customer with pagination.
+ * 
+ * IMPORTANT: Do NOT use filter[includeCompleted] when filtering by customerId.
+ * The Unit API returns 400 "Can not filter by status and use include completion option"
+ * because filtering by customerId implicitly applies status filtering.
+ * Without includeCompleted, the API returns all payments (pending + completed) by default.
  */
 async function fetchReceivedPaymentsForCustomer(
   customerId: string,
@@ -143,13 +148,8 @@ async function fetchReceivedPaymentsForCustomer(
   const allPayments: ReceivedPayment[] = [];
   let offset = 0;
   const limit = 1000;
-  let hasMore = true;
 
-  while (hasMore) {
-    // NOTE: Do NOT combine filter[includeCompleted] with filter[status]
-    // — the Unit API returns 400 if both are present.
-    // We omit includeCompleted entirely to avoid the conflict,
-    // then fall back to explicit status filters if needed.
+  while (true) {
     const params = new URLSearchParams({
       'filter[customerId]': customerId,
       'filter[since]': since,
@@ -163,37 +163,38 @@ async function fetchReceivedPaymentsForCustomer(
       'Content-Type': 'application/vnd.api+json',
     };
 
-    let response = await fetch(`${UNIT_API_URL}/received-payments?${params}`, {
-      headers,
-      next: { revalidate: 300 },
-    });
-
-    // If the base query fails, the API may need explicit status filters
-    if (!response.ok) {
-      const firstStatus = response.status;
-      // Retry once with includeCompleted (some Unit orgs require it)
-      params.set('filter[includeCompleted]', 'true');
+    let response: Response;
+    try {
       response = await fetch(`${UNIT_API_URL}/received-payments?${params}`, {
         headers,
         next: { revalidate: 300 },
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Unit API Error for customer ${customerId}: ${firstStatus} / ${response.status}`, errorText);
-        break;
-      }
+    } catch (err) {
+      console.error(`Network error for customer ${customerId}:`, err);
+      break;
     }
 
-    const data: UnitApiResponse = await response.json();
+    if (!response.ok) {
+      console.error(`Unit API error for customer ${customerId}: ${response.status}`);
+      break;
+    }
+
+    let data: UnitApiResponse;
+    try {
+      data = await response.json();
+    } catch {
+      console.error(`JSON parse error for customer ${customerId}`);
+      break;
+    }
+
     allPayments.push(...data.data);
 
     // Reliable pagination termination
     const total = data.meta?.pagination?.total;
     if (total !== undefined) {
-      hasMore = offset + limit < total;
+      if (offset + limit >= total) break;
     } else {
-      hasMore = data.data.length === limit;
+      if (data.data.length < limit) break;
     }
     offset += limit;
   }
