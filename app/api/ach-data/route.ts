@@ -213,8 +213,13 @@ async function fetchPayrollPaymentsForEmployer(
   
   // Debug: log sample customer IDs from payments vs what we're looking for
   const samplePaymentCids = allOrgPayments.slice(0, 5).map(p => p.relationships.customer.data.id);
-  console.log(`[${employerName}] Looking for customer IDs: ${customerIds.slice(0, 5).join(', ')}...`);
-  console.log(`[${employerName}] Sample payment customer IDs: ${samplePaymentCids.join(', ')}`);
+  const uniquePaymentCids = new Set(allOrgPayments.map(p => p.relationships.customer.data.id));
+  console.log(`[${employerName}] Looking for ${customerIds.length} customer IDs: ${customerIds.slice(0, 5).join(', ')}...`);
+  console.log(`[${employerName}] Payments have ${uniquePaymentCids.size} unique customers. Sample: ${samplePaymentCids.join(', ')}`);
+  
+  // Check if ANY of our customer IDs exist in the payments
+  const matchingIds = customerIds.filter(id => uniquePaymentCids.has(id));
+  console.log(`[${employerName}] Matching customer IDs found: ${matchingIds.length} - ${matchingIds.slice(0, 10).join(', ')}`);
   
   // Filter to only this employer's customers
   const employerPayments = allOrgPayments.filter(p => 
