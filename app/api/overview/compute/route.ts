@@ -62,6 +62,46 @@ interface EmployerResult {
 }
 
 // ============================================================================
+// Unique ACH Tracking (count unique accounts/individuals)
+// ============================================================================
+
+function getUniqueAccountsByWeek(payments: ReceivedPayment[], year: number): Map<number, Set<string>> {
+  const weekAccounts = new Map<number, Set<string>>();
+  payments.forEach(payment => {
+    const dateStr = payment.attributes.completionDate || payment.attributes.createdAt;
+    const date = new Date(dateStr);
+    if (date.getFullYear() === year) {
+      const weekNumber = getWeekNumber(date);
+      if (!weekAccounts.has(weekNumber)) {
+        weekAccounts.set(weekNumber, new Set());
+      }
+      const accountId = payment.relationships.account.data.id;
+      weekAccounts.get(weekNumber)!.add(accountId);
+    }
+  });
+  return weekAccounts;
+}
+
+function countUniqueAccountsUpToWeek(weekAccounts: Map<number, Set<string>>, maxWeek: number): number {
+  const allAccounts = new Set<string>();
+  for (let week = 1; week <= maxWeek; week++) {
+    const accounts = weekAccounts.get(week);
+    if (accounts) {
+      accounts.forEach(acc => allAccounts.add(acc));
+    }
+  }
+  return allAccounts.size;
+}
+
+function countTotalUniqueAccounts(payments: ReceivedPayment[]): number {
+  const uniqueAccounts = new Set<string>();
+  payments.forEach(payment => {
+    uniqueAccounts.add(payment.relationships.account.data.id);
+  });
+  return uniqueAccounts.size;
+}
+
+// ============================================================================
 // Payment Filtering (same logic as ach-data route)
 // ============================================================================
 
@@ -405,19 +445,22 @@ async function computeAllEmployers(
         currPayments.push(...(currByCustomer.get(cid) || []));
       }
 
-      const prevByWeek = aggregateByWeek(prevPayments, previousYear);
-      const prevSamePeriod = countPaymentsUpToWeek(prevByWeek, lastCompleteWeek);
+      // Count unique accounts (individuals) who received ACH payments
+      const prevByWeekUnique = getUniqueAccountsByWeek(prevPayments, previousYear);
+      const prevSamePeriodUnique = countUniqueAccountsUpToWeek(prevByWeekUnique, lastCompleteWeek);
+      const currUniqueTotal = countTotalUniqueAccounts(currPayments);
+      const prevUniqueTotal = countTotalUniqueAccounts(prevPayments);
 
-      const yoyChange = prevSamePeriod > 0
-        ? ((currPayments.length - prevSamePeriod) / prevSamePeriod * 100)
-        : (currPayments.length > 0 ? 100 : 0);
+      const yoyChange = prevSamePeriodUnique > 0
+        ? ((currUniqueTotal - prevSamePeriodUnique) / prevSamePeriodUnique * 100)
+        : (currUniqueTotal > 0 ? 100 : 0);
 
       results.push({
         employer_name: employerName,
         worker_count: customerIds.length,
-        prev_year_same_period: prevSamePeriod,
-        curr_year_total: currPayments.length,
-        prev_year_full: prevPayments.length,
+        prev_year_same_period: prevSamePeriodUnique,
+        curr_year_total: currUniqueTotal,
+        prev_year_full: prevUniqueTotal,
         yoy_change_percent: Math.round(yoyChange * 100) / 100,
         trend: getTrend(yoyChange),
         computed_at: new Date().toISOString(),
@@ -448,19 +491,22 @@ async function computeAllEmployers(
         const prevFiltered = prevPayments.filter(p => !shouldExcludePayment(p));
         const currFiltered = currPayments.filter(p => !shouldExcludePayment(p));
 
-        const prevByWeek = aggregateByWeek(prevFiltered, previousYear);
-        const prevSamePeriod = countPaymentsUpToWeek(prevByWeek, lastCompleteWeek);
+        // Count unique accounts (individuals) who received ACH payments
+        const prevByWeekUnique = getUniqueAccountsByWeek(prevFiltered, previousYear);
+        const prevSamePeriodUnique = countUniqueAccountsUpToWeek(prevByWeekUnique, lastCompleteWeek);
+        const currUniqueTotal = countTotalUniqueAccounts(currFiltered);
+        const prevUniqueTotal = countTotalUniqueAccounts(prevFiltered);
 
-        const yoyChange = prevSamePeriod > 0
-          ? ((currFiltered.length - prevSamePeriod) / prevSamePeriod * 100)
-          : (currFiltered.length > 0 ? 100 : 0);
+        const yoyChange = prevSamePeriodUnique > 0
+          ? ((currUniqueTotal - prevSamePeriodUnique) / prevSamePeriodUnique * 100)
+          : (currUniqueTotal > 0 ? 100 : 0);
 
         const result: EmployerResult = {
           employer_name: employerName,
           worker_count: customerIds.length,
-          prev_year_same_period: prevSamePeriod,
-          curr_year_total: currFiltered.length,
-          prev_year_full: prevFiltered.length,
+          prev_year_same_period: prevSamePeriodUnique,
+          curr_year_total: currUniqueTotal,
+          prev_year_full: prevUniqueTotal,
           yoy_change_percent: Math.round(yoyChange * 100) / 100,
           trend: getTrend(yoyChange),
           computed_at: new Date().toISOString(),

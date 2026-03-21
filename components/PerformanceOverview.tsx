@@ -260,8 +260,8 @@ export function PerformanceOverview({ onSelectEmployer }: Props) {
               <div className="col-span-1">#</div>
               <div className="col-span-3">Employer</div>
               <div className="col-span-1 text-right">Workers</div>
-              <div className="col-span-2 text-right">2025 (same period)</div>
-              <div className="col-span-2 text-right">2026 YTD</div>
+              <div className="col-span-2 text-right" title="Unique individuals who received ACH in 2025 (same period)">2025 Unique ACH</div>
+              <div className="col-span-2 text-right" title="Unique individuals who received ACH in 2026 YTD">2026 Unique ACH</div>
               <div className="col-span-1 text-right">YoY</div>
               <div className="col-span-2 text-right">Status</div>
             </div>
@@ -311,16 +311,16 @@ export function PerformanceOverview({ onSelectEmployer }: Props) {
                   </span>
                 </div>
 
-                {/* Previous Year Same Period */}
+                {/* Previous Year Same Period - Unique ACH Recipients */}
                 <div className="col-span-2 text-right">
-                  <span className="text-sm text-indigo-400 font-mono font-medium">
+                  <span className="text-sm text-indigo-400 font-mono font-medium" title="Unique individuals who received ACH">
                     {employer.prev_year_same_period.toLocaleString()}
                   </span>
                 </div>
 
-                {/* Current Year Total */}
+                {/* Current Year Total - Unique ACH Recipients */}
                 <div className="col-span-2 text-right">
-                  <span className="text-sm text-amber-400 font-mono font-medium">
+                  <span className="text-sm text-amber-400 font-mono font-medium" title="Unique individuals who received ACH">
                     {employer.curr_year_total.toLocaleString()}
                   </span>
                 </div>
