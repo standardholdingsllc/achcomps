@@ -19,6 +19,7 @@ interface EmployerOverview {
 
 interface Props {
   onSelectEmployer: (employer: { customerId: string; name: string; workerCount: number }) => void;
+  onComputeComplete?: () => void;
 }
 
 type TabKey = 'worst' | 'best';
@@ -27,7 +28,7 @@ type TabKey = 'worst' | 'best';
 // Component
 // ============================================================================
 
-export function PerformanceOverview({ onSelectEmployer }: Props) {
+export function PerformanceOverview({ onSelectEmployer, onComputeComplete }: Props) {
   const [employers, setEmployers] = useState<EmployerOverview[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -104,8 +105,8 @@ export function PerformanceOverview({ onSelectEmployer }: Props) {
       setError(err instanceof Error ? err.message : 'Compute failed');
     } finally {
       setComputing(false);
-      // Refresh the data from Supabase
       await fetchOverview();
+      onComputeComplete?.();
     }
   };
 

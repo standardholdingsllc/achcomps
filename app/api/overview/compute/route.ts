@@ -1,4 +1,5 @@
 import { getSupabase } from '@/lib/supabase';
+import { upsertUniverseData } from '@/lib/universe';
 import customerData from '@/data/customer_company.json';
 
 export const dynamic = 'force-dynamic';
@@ -356,9 +357,20 @@ async function fetchPaymentsForCustomer(
 // Main Computation
 // ============================================================================
 
+interface ComputeResult {
+  employers: EmployerResult[];
+  prevFiltered: ReceivedPayment[];
+  currFiltered: ReceivedPayment[];
+  previousYear: number;
+  currentYear: number;
+  lastCompleteWeek: number;
+  totalWorkers: number;
+  totalEmployers: number;
+}
+
 async function computeAllEmployers(
   sendProgress: (msg: string, pct: number) => Promise<void>,
-): Promise<EmployerResult[]> {
+): Promise<ComputeResult> {
   const mapping = customerData as CustomerMapping;
 
   // Build employer groups
@@ -411,22 +423,24 @@ async function computeAllEmployers(
   // Process results
   // ------------------------------------------------------------------
   const results: EmployerResult[] = [];
+  let allPrevFiltered: ReceivedPayment[] = [];
+  let allCurrFiltered: ReceivedPayment[] = [];
 
   if (allPrevPayments !== null && allCurrPayments !== null) {
     // ---- FAST PATH: aggregate in memory ----
     await sendProgress('Filtering non-payroll payments...', 55);
-    const prevFiltered = allPrevPayments.filter(p => !shouldExcludePayment(p));
-    const currFiltered = allCurrPayments.filter(p => !shouldExcludePayment(p));
+    allPrevFiltered = allPrevPayments.filter(p => !shouldExcludePayment(p));
+    allCurrFiltered = allCurrPayments.filter(p => !shouldExcludePayment(p));
 
     // Build lookup: customerId → payments
     const prevByCustomer = new Map<string, ReceivedPayment[]>();
-    for (const p of prevFiltered) {
+    for (const p of allPrevFiltered) {
       const cid = p.relationships.customer.data.id;
       if (!prevByCustomer.has(cid)) prevByCustomer.set(cid, []);
       prevByCustomer.get(cid)!.push(p);
     }
     const currByCustomer = new Map<string, ReceivedPayment[]>();
-    for (const p of currFiltered) {
+    for (const p of allCurrFiltered) {
       const cid = p.relationships.customer.data.id;
       if (!currByCustomer.has(cid)) currByCustomer.set(cid, []);
       currByCustomer.get(cid)!.push(p);
@@ -491,6 +505,9 @@ async function computeAllEmployers(
         const prevFiltered = prevPayments.filter(p => !shouldExcludePayment(p));
         const currFiltered = currPayments.filter(p => !shouldExcludePayment(p));
 
+        allPrevFiltered.push(...prevFiltered);
+        allCurrFiltered.push(...currFiltered);
+
         // Count unique accounts (individuals) who received ACH payments
         const prevByWeekUnique = getUniqueAccountsByWeek(prevFiltered, previousYear);
         const prevSamePeriodUnique = countUniqueAccountsUpToWeek(prevByWeekUnique, lastCompleteWeek);
@@ -520,7 +537,6 @@ async function computeAllEmployers(
           .upsert(result, { onConflict: 'employer_name' });
       } catch (err) {
         console.error(`Error processing ${employerName}:`, err);
-        // Continue — don't let one employer break the whole run
       }
     }
   }
@@ -543,7 +559,16 @@ async function computeAllEmployers(
     }
   }
 
-  return results;
+  return {
+    employers: results,
+    prevFiltered: allPrevFiltered,
+    currFiltered: allCurrFiltered,
+    previousYear,
+    currentYear,
+    lastCompleteWeek,
+    totalWorkers: Object.keys(mapping).length,
+    totalEmployers: employers.length,
+  };
 }
 
 // ============================================================================
@@ -579,11 +604,31 @@ export async function POST() {
 
       await sendProgress('Starting overview computation...', 0);
 
-      const results = await computeAllEmployers(sendProgress);
+      const {
+        employers: results,
+        prevFiltered,
+        currFiltered,
+        previousYear,
+        currentYear,
+        lastCompleteWeek,
+        totalWorkers,
+        totalEmployers,
+      } = await computeAllEmployers(sendProgress);
+
+      await sendProgress('Computing universe-wide aggregation...', 92);
+      await upsertUniverseData(
+        prevFiltered,
+        currFiltered,
+        previousYear,
+        currentYear,
+        lastCompleteWeek,
+        totalWorkers,
+        totalEmployers,
+      );
 
       await sendEvent({
         type: 'complete',
-        message: `Successfully computed metrics for ${results.length} employers`,
+        message: `Successfully computed metrics for ${results.length} employers + universe summary`,
         progress: 100,
         employerCount: results.length,
       });

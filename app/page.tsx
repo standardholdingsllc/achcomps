@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { EmployerSearch } from '@/components/EmployerSearch';
 import { ACHChart } from '@/components/ACHChart';
 import { SummaryCards } from '@/components/SummaryCards';
 import { PerformanceOverview } from '@/components/PerformanceOverview';
+import { UniverseSummary } from '@/components/UniverseSummary';
 
 interface Employer {
   customerId: string;
@@ -14,6 +15,11 @@ interface Employer {
 
 export default function Dashboard() {
   const [selectedEmployer, setSelectedEmployer] = useState<Employer | null>(null);
+  const [universeRefreshKey, setUniverseRefreshKey] = useState(0);
+
+  const handleComputeComplete = useCallback(() => {
+    setUniverseRefreshKey(k => k + 1);
+  }, []);
 
   return (
     <main className="min-h-screen p-6 md:p-10">
@@ -41,9 +47,14 @@ export default function Dashboard() {
           </p>
         </header>
 
-        {/* Overview Report — Front and center */}
+        {/* Universe-wide ACH Overview — Default landing view */}
         <section className="mb-10">
-          <PerformanceOverview onSelectEmployer={setSelectedEmployer} />
+          <UniverseSummary refreshKey={universeRefreshKey} />
+        </section>
+
+        {/* Per-Employer Overview */}
+        <section className="mb-10">
+          <PerformanceOverview onSelectEmployer={setSelectedEmployer} onComputeComplete={handleComputeComplete} />
         </section>
 
         {/* Search Section */}

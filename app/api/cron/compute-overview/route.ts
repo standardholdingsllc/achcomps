@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/supabase';
+import { upsertUniverseData } from '@/lib/universe';
 import customerData from '@/data/customer_company.json';
 
 export const dynamic = 'force-dynamic';
@@ -112,25 +113,39 @@ function getWeekNumber(date: Date): number {
   return Math.ceil((days + startOfYear.getDay() + 1) / 7);
 }
 
-function aggregateByWeek(payments: ReceivedPayment[], year: number): Map<number, number> {
-  const weekCounts = new Map<number, number>();
+function getUniqueAccountsByWeek(payments: ReceivedPayment[], year: number): Map<number, Set<string>> {
+  const weekAccounts = new Map<number, Set<string>>();
   payments.forEach(payment => {
     const dateStr = payment.attributes.completionDate || payment.attributes.createdAt;
     const date = new Date(dateStr);
     if (date.getFullYear() === year) {
       const weekNumber = getWeekNumber(date);
-      weekCounts.set(weekNumber, (weekCounts.get(weekNumber) || 0) + 1);
+      if (!weekAccounts.has(weekNumber)) {
+        weekAccounts.set(weekNumber, new Set());
+      }
+      weekAccounts.get(weekNumber)!.add(payment.relationships.account.data.id);
     }
   });
-  return weekCounts;
+  return weekAccounts;
 }
 
-function countPaymentsUpToWeek(weekCounts: Map<number, number>, maxWeek: number): number {
-  let total = 0;
+function countUniqueAccountsUpToWeek(weekAccounts: Map<number, Set<string>>, maxWeek: number): number {
+  const allAccounts = new Set<string>();
   for (let week = 1; week <= maxWeek; week++) {
-    total += weekCounts.get(week) || 0;
+    const accounts = weekAccounts.get(week);
+    if (accounts) {
+      accounts.forEach(acc => allAccounts.add(acc));
+    }
   }
-  return total;
+  return allAccounts.size;
+}
+
+function countTotalUniqueAccounts(payments: ReceivedPayment[]): number {
+  const uniqueAccounts = new Set<string>();
+  payments.forEach(payment => {
+    uniqueAccounts.add(payment.relationships.account.data.id);
+  });
+  return uniqueAccounts.size;
 }
 
 function getTrend(yoyChange: number): string {
@@ -196,7 +211,18 @@ async function fetchAllOrgPayments(
 // Main Computation
 // ============================================================================
 
-async function computeAllEmployers(): Promise<EmployerResult[]> {
+interface ComputeResult {
+  employers: EmployerResult[];
+  prevFiltered: ReceivedPayment[];
+  currFiltered: ReceivedPayment[];
+  previousYear: number;
+  currentYear: number;
+  lastCompleteWeek: number;
+  totalWorkers: number;
+  totalEmployers: number;
+}
+
+async function computeAllEmployers(): Promise<ComputeResult> {
   const mapping = customerData as CustomerMapping;
 
   // Build employer groups
@@ -259,26 +285,37 @@ async function computeAllEmployers(): Promise<EmployerResult[]> {
       currPayments.push(...(currByCustomer.get(cid) || []));
     }
 
-    const prevByWeek = aggregateByWeek(prevPayments, previousYear);
-    const prevSamePeriod = countPaymentsUpToWeek(prevByWeek, lastCompleteWeek);
+    const prevByWeek = getUniqueAccountsByWeek(prevPayments, previousYear);
+    const prevSamePeriod = countUniqueAccountsUpToWeek(prevByWeek, lastCompleteWeek);
+    const currTotal = countTotalUniqueAccounts(currPayments);
+    const prevTotal = countTotalUniqueAccounts(prevPayments);
 
     const yoyChange = prevSamePeriod > 0
-      ? ((currPayments.length - prevSamePeriod) / prevSamePeriod * 100)
-      : (currPayments.length > 0 ? 100 : 0);
+      ? ((currTotal - prevSamePeriod) / prevSamePeriod * 100)
+      : (currTotal > 0 ? 100 : 0);
 
     results.push({
       employer_name: employerName,
       worker_count: customerIds.length,
       prev_year_same_period: prevSamePeriod,
-      curr_year_total: currPayments.length,
-      prev_year_full: prevPayments.length,
+      curr_year_total: currTotal,
+      prev_year_full: prevTotal,
       yoy_change_percent: Math.round(yoyChange * 100) / 100,
       trend: getTrend(yoyChange),
       computed_at: new Date().toISOString(),
     });
   }
 
-  return results;
+  return {
+    employers: results,
+    prevFiltered,
+    currFiltered,
+    previousYear,
+    currentYear,
+    lastCompleteWeek,
+    totalWorkers: Object.keys(mapping).length,
+    totalEmployers: employers.length,
+  };
 }
 
 // ============================================================================
@@ -306,9 +343,18 @@ export async function GET(request: Request) {
 
   try {
     console.log('[Cron] Starting overview computation...');
-    const results = await computeAllEmployers();
+    const {
+      employers: results,
+      prevFiltered,
+      currFiltered,
+      previousYear,
+      currentYear,
+      lastCompleteWeek,
+      totalWorkers,
+      totalEmployers,
+    } = await computeAllEmployers();
 
-    // Save to Supabase in batches
+    // Save per-employer data to Supabase in batches
     console.log(`[Cron] Saving ${results.length} employers to Supabase...`);
     for (let i = 0; i < results.length; i += 50) {
       const batch = results.slice(i, i + 50);
@@ -322,12 +368,24 @@ export async function GET(request: Request) {
       }
     }
 
+    // Save universe-wide aggregation
+    console.log('[Cron] Computing universe-wide aggregation...');
+    await upsertUniverseData(
+      prevFiltered,
+      currFiltered,
+      previousYear,
+      currentYear,
+      lastCompleteWeek,
+      totalWorkers,
+      totalEmployers,
+    );
+
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[Cron] Completed in ${duration}s — ${results.length} employers updated`);
+    console.log(`[Cron] Completed in ${duration}s — ${results.length} employers + universe updated`);
 
     return NextResponse.json({
       success: true,
-      message: `Computed metrics for ${results.length} employers`,
+      message: `Computed metrics for ${results.length} employers + universe summary`,
       duration: `${duration}s`,
       timestamp: new Date().toISOString(),
     });
