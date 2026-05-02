@@ -39,7 +39,16 @@ export async function GET() {
     ]);
 
     if (weeklyResult.error) {
-      throw new Error(weeklyResult.error.message);
+      const msg = weeklyResult.error.message || '';
+      if (msg.includes('schema cache') || msg.includes('does not exist') || msg.includes('relation')) {
+        return NextResponse.json({
+          chartData: [],
+          summary: null,
+          hasData: false,
+          notice: 'Universe tables have not been created yet. Run a company-wide scan to populate data.',
+        });
+      }
+      throw new Error(msg);
     }
 
     const summary: SummaryRow | null = summaryResult.data;
